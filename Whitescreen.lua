@@ -1,4 +1,4 @@
--- Whiteout Overlay – LocalScript + Auto Respawn + Timer
+-- Whiteout Overlay – LocalScript + Auto Respawn + Timer + Toggle Button + FPS Stats
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -34,17 +34,17 @@ end
 
 -- Label hiển thị
 local infoLabel = Instance.new("TextLabel")
-infoLabel.Size = UDim2.new(1, 0, 0, 260)
+infoLabel.Size = UDim2.new(1, 0, 0, 280)
 infoLabel.Position = UDim2.new(0.5, 0, 0.5, 0)
 infoLabel.AnchorPoint = Vector2.new(0.5, 0.5)
 infoLabel.BackgroundTransparency = 1
 infoLabel.TextColor3 = Color3.new(0, 0, 0)
 infoLabel.TextStrokeTransparency = 0.3
 infoLabel.Font = Enum.Font.SourceSansBold
-infoLabel.TextSize = 44
+infoLabel.TextSize = 36
 infoLabel.TextXAlignment = Enum.TextXAlignment.Center
 infoLabel.TextYAlignment = Enum.TextYAlignment.Center
-infoLabel.LineHeight = 1.1
+infoLabel.LineHeight = 1.15
 infoLabel.Parent = gui
 
 -- Biến
@@ -52,9 +52,12 @@ local visible = true -- auto bật
 local transparency = 0
 local mapHidden = false
 local storedParents = {}
-local whiteoutStartTime = os.clock() -- lưu thời gian bật whiteout
+local whiteoutStartTime = os.clock()
 
--- Ẩn map (trừ nhân vật + camera)
+-- FPS stats
+local fpsMin, fpsMax, fpsSum, fpsCount = math.huge, 0, 0, 0
+
+-- Ẩn map
 local function hideMap()
 	if mapHidden then return end
 	mapHidden = true
@@ -72,9 +75,7 @@ local function showMap()
 	if not mapHidden then return end
 	mapHidden = false
 	for obj, parent in pairs(storedParents) do
-		if obj and parent then
-			obj.Parent = parent
-		end
+		if obj and parent then obj.Parent = parent end
 	end
 	storedParents = {}
 end
@@ -86,13 +87,101 @@ local function apply()
 	infoLabel.Visible = visible
 	if visible then
 		hideMap()
-		whiteoutStartTime = os.clock() -- reset timer khi bật lại
+		whiteoutStartTime = os.clock()
 	else
 		showMap()
 	end
 end
 
--- Hiển thị ban đầu (FPS=0, Timer=0)
+-- Text ban đầu
+infoLabel.Text = string.format(
+	"Game: %s\nPlayer: %s (@%s)\nFPS: %d\nAVG: %d | MIN: %d | MAX: %d\nWhiteout On: 0s",
+	gameName,
+	lp.DisplayName,
+	lp.Name,
+	0, 0, 0, 0
+)
+
+-- Auto bật khi load
+apply()
+
+-- Nút bật/tắt Whiteout
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0, 200, 0, 50)
+toggleButton.Position = UDim2.new(0.5, 0, 0.9, 0)
+toggleButton.AnchorPoint = Vector2.new(0.5, 0.5)
+toggleButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 28
+toggleButton.Text = "Whiteout: ON"
+toggleButton.Parent = gui
+toggleButton.ZIndex = 1000000
+
+toggleButton.MouseButton1Click:Connect(function()
+	visible = not visible
+	apply()
+	toggleButton.Text = visible and "Whiteout: ON" or "Whiteout: OFF"
+end)
+
+-- Cập nhật FPS + Timer
+local lastUpdate = os.clock()
+local frames = 0
+RunService.Heartbeat:Connect(function()
+	frames += 1
+	local now = os.clock()
+	if now - lastUpdate >= 1 then
+		local fps = frames / (now - lastUpdate)
+		frames = 0
+		lastUpdate = now
+
+		-- tính min/max/avg
+		fpsCount += 1
+		fpsSum += fps
+		if fps < fpsMin then fpsMin = fps end
+		if fps > fpsMax then fpsMax = fps end
+		local fpsAvg = fpsSum / fpsCount
+
+		local elapsed = math.floor(now - whiteoutStartTime)
+		local timerText = visible and string.format("Whiteout On: %ds", elapsed) or "Whiteout Off"
+
+		infoLabel.Text = string.format(
+			"Game: %s\nPlayer: %s (@%s)\nFPS: %d\nAVG: %d | MIN: %d | MAX: %d\n%s",
+			gameName,
+			lp.DisplayName,
+			lp.Name,
+			math.floor(fps + 0.5),
+			math.floor(fpsAvg + 0.5),
+			math.floor(fpsMin + 0.5),
+			math.floor(fpsMax + 0.5),
+			timerText
+		)
+	end
+end)
+
+-- Auto bật lại khi respawn
+lp.CharacterAdded:Connect(function()
+	task.wait(1)
+	visible = true
+	apply()
+	toggleButton.Text = "Whiteout: ON"
+end)
+
+-- Phím tắt
+UIS.InputBegan:Connect(function(input, gp)
+	if gp then return end
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		visible = not visible
+		apply()
+		toggleButton.Text = visible and "Whiteout: ON" or "Whiteout: OFF"
+	elseif input.KeyCode == Enum.KeyCode.LeftBracket then
+		transparency = math.clamp(transparency + 0.05, 0, 1)
+		apply()
+	elseif input.KeyCode == Enum.KeyCode.RightBracket then
+		transparency = math.clamp(transparency - 0.05, 0, 1)
+		apply()
+	end
+end)-- Hiển thị ban đầu (FPS=0, Timer=0)
 infoLabel.Text = string.format(
 	"Game: %s\nPlayer: %s (@%s)\nFPS: %d\nWhiteout On: 0s",
 	gameName,
